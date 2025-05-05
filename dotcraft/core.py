@@ -1,7 +1,8 @@
+from PIL import Image
 import cv2
 import numpy as np
 
-def create_pixel_art(img_bgr, pixel_size=10, k=8) -> np.ndarray:
+def create_pixel_art(img_bgr, pixel_size=10, k=8, algorithm='kmeans'):
     '''
     OpenCV (BGR) 画像をドット絵化してBGRで返す
     
@@ -13,27 +14,37 @@ def create_pixel_art(img_bgr, pixel_size=10, k=8) -> np.ndarray:
         ドットのサイズ
     k : int
         K-means での色数
+    algorithm : str
+        色数減少アルゴリズム ('kmeans', 'median', 'octree')
     Returns
     -------
     dotted : ndarray
         ドット絵化された画像 (BGR)
     '''
     h, w = img_bgr.shape[:2]
-
-    # 1) 縮小
     small = cv2.resize(img_bgr, (w // pixel_size, h // pixel_size),
                        interpolation=cv2.INTER_NEAREST)
 
-    # 2) K‑means で色数を減らす
-    data = small.reshape((-1, 3)).astype(np.float32)
-    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.2)
-    _ret, labels, centers = cv2.kmeans(data, k, None, criteria, 10,
-                                       cv2.KMEANS_RANDOM_CENTERS)
-    quant = centers[labels.flatten()].astype(np.uint8).reshape(small.shape)
+    if algorithm == 'median':            # Pillow の MEDIANCUT
+        pil = Image.fromarray(cv2.cvtColor(small, cv2.COLOR_BGR2RGB))
+        pal = pil.quantize(colors=k, method=Image.MEDIANCUT)
+        quant = cv2.cvtColor(np.array(pal.convert('RGB')), cv2.COLOR_RGB2BGR)
 
-    # 3) 拡大してドット絵化
-    dotted = cv2.resize(quant, (w, h), interpolation=cv2.INTER_NEAREST)
-    return dotted
+    elif algorithm == 'octree':          # Pillow の FASTOCTREE
+        pil = Image.fromarray(cv2.cvtColor(small, cv2.COLOR_BGR2RGB))
+        pal = pil.quantize(colors=k, method=Image.FASTOCTREE)
+        quant = cv2.cvtColor(np.array(pal.convert('RGB')), cv2.COLOR_RGB2BGR)
+
+    else:                                # 既存 k‑means
+        data = small.reshape((-1, 3)).astype(np.float32)
+        _, labels, centers = cv2.kmeans(data, k, None,
+                                        (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER,
+                                         100, 0.2),
+                                        10, cv2.KMEANS_RANDOM_CENTERS)
+        centers = np.uint8(centers)
+        quant = centers[labels.flatten()].reshape(small.shape)
+
+    return cv2.resize(quant, (w, h), interpolation=cv2.INTER_NEAREST)
 
 def imread_unicode(path: str, flags=cv2.IMREAD_COLOR):
     '''

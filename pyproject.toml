@@ -8,4 +8,6 @@ dependencies = [
     "matplotlib>=3.10.1",
     "numpy>=2.2.5",
     "opencv-python>=4.11.0.86",
+    "pillow>=11.2.1",
+    "tkinterdnd2>=0.4.3",
 ]
